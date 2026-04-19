@@ -150,7 +150,11 @@ fetch_issue() {
           elif .type == "tableRow" then
             "| " + (.content // [] | map(adf_to_md) | join(" | ")) + " |\n"
           elif .type == "tableCell" or .type == "tableHeader" then
-            (.content // [] | map(adf_to_md) | join("") | gsub("\n+$"; "") | gsub("\n"; " "))
+            (.content // [] | map(adf_to_md) | join("")
+              | gsub("\\s+$"; "")
+              | gsub("\n"; " ")
+              | gsub(" {2,}"; " ")
+              | ltrimstr(" "))
           else (.content // [] | map(adf_to_md) | join(""))
           end
         elif type == "array" then
