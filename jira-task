@@ -18,10 +18,20 @@ usage() {
 set_zshrc_var() {
   local key="$1"
   local value="$2"
+  local new_line="export ${key}=\"${value}\""
   if grep -q "^export ${key}=" "$JIRA_TASK_ZSHRC" 2>/dev/null; then
-    sed -i '' "s|^export ${key}=.*|export ${key}=\"${value}\"|" "$JIRA_TASK_ZSHRC"
+    local tmpfile
+    tmpfile=$(mktemp)
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" == "export ${key}="* ]]; then
+        printf '%s\n' "$new_line"
+      else
+        printf '%s\n' "$line"
+      fi
+    done < "$JIRA_TASK_ZSHRC" > "$tmpfile"
+    mv "$tmpfile" "$JIRA_TASK_ZSHRC"
   else
-    printf 'export %s="%s"\n' "$key" "$value" >> "$JIRA_TASK_ZSHRC"
+    printf '%s\n' "$new_line" >> "$JIRA_TASK_ZSHRC"
   fi
 }
 
