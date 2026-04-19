@@ -50,10 +50,19 @@ config() {
   echo "Config saved. Run: source $JIRA_TASK_ZSHRC"
 }
 
+fetch_issue() {
+  local issue_key="$1"
+  if [[ -z "${JIRA_URL:-}" ]] || [[ -z "${JIRA_EMAIL:-}" ]] || [[ -z "${JIRA_API_TOKEN:-}" ]]; then
+    echo "Missing config. Run: jira-task --config" >&2
+    exit 1
+  fi
+  echo "fetch not yet complete"
+}
+
 check_dependencies
 
 case "${1:-}" in
   --config) config ;;
   "") usage ;;
-  *) echo "fetch not yet implemented" ;;
+  *) fetch_issue "$1" ;;
 esac

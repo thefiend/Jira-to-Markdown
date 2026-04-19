@@ -37,3 +37,21 @@ setup() {
   [ "$(grep -c 'JIRA_URL' "$JIRA_TASK_ZSHRC")" -eq 1 ]
   grep -q 'export JIRA_URL="https://new.atlassian.net"' "$JIRA_TASK_ZSHRC"
 }
+
+@test "exits with message if JIRA_URL is missing" {
+  run env JIRA_URL="" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing config. Run: jira-task --config"* ]]
+}
+
+@test "exits with message if JIRA_EMAIL is missing" {
+  run env JIRA_URL="https://x.atlassian.net" JIRA_EMAIL="" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing config. Run: jira-task --config"* ]]
+}
+
+@test "exits with message if JIRA_API_TOKEN is missing" {
+  run env JIRA_URL="https://x.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="" bash "$SCRIPT" PROJ-123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing config. Run: jira-task --config"* ]]
+}
