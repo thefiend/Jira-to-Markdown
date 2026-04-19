@@ -7,3 +7,9 @@ setup() {
   mkdir -p "$TEST_DIR/bin"
   export JIRA_TASK_ZSHRC="$TEST_DIR/.zshrc"
 }
+
+@test "exits with error if jq is not installed" {
+  run env PATH="$TEST_DIR/bin" /bin/bash "$SCRIPT" PROJ-123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"jq is required. Install with: brew install jq"* ]]
+}

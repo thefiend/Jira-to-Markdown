@@ -1,2 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+JIRA_TASK_ZSHRC="${JIRA_TASK_ZSHRC:-$HOME/.zshrc}"
+
+check_dependencies() {
+  if ! command -v jq &>/dev/null; then
+    echo "jq is required. Install with: brew install jq" >&2
+    exit 1
+  fi
+}
+
+usage() {
+  echo "Usage: jira-task --config | ISSUE-KEY" >&2
+  exit 1
+}
+
+check_dependencies
+
+case "${1:-}" in
+  --config) echo "config not yet implemented" ;;
+  "") usage ;;
+  *) echo "fetch not yet implemented" ;;
+esac
