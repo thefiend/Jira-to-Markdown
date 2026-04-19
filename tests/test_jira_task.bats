@@ -10,7 +10,7 @@ setup() {
 
 setup_mock_curl() {
   local status_code="$1"
-  local body="${2:-{}}"
+  local body="${2:-}"
   printf '%s' "$body" > "$TEST_DIR/mock_body.json"
   printf '%s' "$status_code" > "$TEST_DIR/mock_status.txt"
 
@@ -18,13 +18,13 @@ setup_mock_curl() {
 #!/usr/bin/env bash
 TEST_BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEST_DIR="$(dirname "$TEST_BIN_DIR")"
-i=1
-while [ $i -le $# ]; do
-  if [ "${!i}" = "-o" ]; then
-    j=$((i+1))
-    cp "$TEST_DIR/mock_body.json" "${!j}"
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    cp "$TEST_DIR/mock_body.json" "$2"
+    shift 2
+  else
+    shift
   fi
-  i=$((i+1))
 done
 cat "$TEST_DIR/mock_status.txt"
 CURL_EOF
@@ -98,4 +98,52 @@ CURL_EOF
   run env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
   [ "$status" -eq 1 ]
   [[ "$output" == *"Issue PROJ-123 not found"* ]]
+}
+
+SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Users cannot log in after password reset."}]}]}}}'
+
+@test "creates output file named after issue key" {
+  setup_mock_curl "200" "$SIMPLE_ISSUE"
+  cd "$TEST_DIR"
+  run env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
+  [ "$status" -eq 0 ]
+  [ -f "$TEST_DIR/PROJ-123.md" ]
+}
+
+@test "output file contains issue key and summary as title" {
+  setup_mock_curl "200" "$SIMPLE_ISSUE"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
+  grep -q "^# PROJ-123: Fix the login bug$" "$TEST_DIR/PROJ-123.md"
+}
+
+@test "output file contains description text" {
+  setup_mock_curl "200" "$SIMPLE_ISSUE"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
+  grep -q "Users cannot log in after password reset" "$TEST_DIR/PROJ-123.md"
+}
+
+@test "output file omits Description section when description is null" {
+  local no_desc='{"fields":{"summary":"Empty issue","description":null}}'
+  setup_mock_curl "200" "$no_desc"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-456
+  ! grep -q "## Description" "$TEST_DIR/PROJ-456.md"
+}
+
+@test "converts ADF heading to markdown heading" {
+  local heading_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Section Title"}]}]}}}'
+  setup_mock_curl "200" "$heading_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-789
+  grep -q "^## Section Title" "$TEST_DIR/PROJ-789.md"
+}
+
+@test "converts ADF bullet list to markdown list" {
+  local list_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Item one"}]}]}]}]}}}'
+  setup_mock_curl "200" "$list_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-790
+  grep -q "^- Item one" "$TEST_DIR/PROJ-790.md"
 }

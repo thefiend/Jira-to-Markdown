@@ -90,7 +90,66 @@ fetch_issue() {
       exit 1 ;;
   esac
 
-  echo "fetch not yet complete"
+  local summary
+  summary=$(printf '%s' "$response" | jq -r '.fields.summary')
+
+  local description_json
+  description_json=$(printf '%s' "$response" | jq -c '.fields.description')
+
+  local description_md=""
+  if [[ "$description_json" != "null" ]] && [[ -n "$description_json" ]]; then
+    description_md=$(printf '%s' "$description_json" | jq -r '
+      def adf_to_md:
+        if type == "null" then ""
+        elif type == "object" then
+          if .type == "doc" then
+            (.content // [] | map(adf_to_md) | join(""))
+          elif .type == "text" then
+            ((.marks // []) | map(.type) | contains(["strong"])) as $bold |
+            ((.marks // []) | map(.type) | contains(["em"])) as $em |
+            ((.marks // []) | map(.type) | contains(["code"])) as $code |
+            (.text // "") |
+            if $bold then ("**" + . + "**")
+            elif $em then ("_" + . + "_")
+            elif $code then ("`" + . + "`")
+            else .
+            end
+          elif .type == "paragraph" then
+            ((.content // [] | map(adf_to_md) | join("")) + "\n\n")
+          elif .type == "heading" then
+            (("#" * (.attrs.level // 1)) + " " + (.content // [] | map(adf_to_md) | join("")) + "\n\n")
+          elif .type == "bulletList" then
+            (.content // [] | map(adf_to_md) | join(""))
+          elif .type == "orderedList" then
+            (.content // [] | map(adf_to_md) | join(""))
+          elif .type == "listItem" then
+            ("- " + ((.content // [] | map(adf_to_md) | join("")) | gsub("\n\n$"; "")) + "\n")
+          elif .type == "codeBlock" then
+            ("```\n" + (.content // [] | map(adf_to_md) | join("")) + "```\n\n")
+          elif .type == "hardBreak" then "\n"
+          elif .type == "rule" then "---\n\n"
+          elif .type == "inlineCard" then (.attrs.url // "")
+          elif .type == "mention" then ("@" + (.attrs.displayName // .attrs.id // "unknown"))
+          else (.content // [] | map(adf_to_md) | join(""))
+          end
+        elif type == "array" then
+          map(adf_to_md) | join("")
+        else ""
+        end;
+      adf_to_md
+    ')
+  fi
+
+  local output_file="${issue_key}.md"
+  {
+    printf '# %s: %s\n' "$issue_key" "$summary"
+    if [[ -n "$description_md" ]]; then
+      printf '\n## Description\n\n'
+      printf '%s' "$description_md"
+    fi
+  } > "$output_file"
+
+  echo "Written to ${output_file}"
 }
 
 check_dependencies
