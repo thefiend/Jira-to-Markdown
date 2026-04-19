@@ -13,3 +13,27 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"jq is required. Install with: brew install jq"* ]]
 }
+
+@test "--config writes JIRA_URL to .zshrc" {
+  run bash -c "printf 'https://test.atlassian.net\ntest@example.com\nmy-token\n' | JIRA_TASK_ZSHRC='$JIRA_TASK_ZSHRC' bash '$SCRIPT' --config"
+  [ "$status" -eq 0 ]
+  grep -q 'export JIRA_URL="https://test.atlassian.net"' "$JIRA_TASK_ZSHRC"
+}
+
+@test "--config writes JIRA_EMAIL to .zshrc" {
+  run bash -c "printf 'https://test.atlassian.net\ntest@example.com\nmy-token\n' | JIRA_TASK_ZSHRC='$JIRA_TASK_ZSHRC' bash '$SCRIPT' --config"
+  grep -q 'export JIRA_EMAIL="test@example.com"' "$JIRA_TASK_ZSHRC"
+}
+
+@test "--config writes JIRA_API_TOKEN to .zshrc" {
+  run bash -c "printf 'https://test.atlassian.net\ntest@example.com\nmy-token\n' | JIRA_TASK_ZSHRC='$JIRA_TASK_ZSHRC' bash '$SCRIPT' --config"
+  grep -q 'export JIRA_API_TOKEN="my-token"' "$JIRA_TASK_ZSHRC"
+}
+
+@test "--config updates existing var without duplicating" {
+  echo 'export JIRA_URL="https://old.atlassian.net"' > "$JIRA_TASK_ZSHRC"
+  run bash -c "printf 'https://new.atlassian.net\nnew@example.com\nnew-token\n' | JIRA_TASK_ZSHRC='$JIRA_TASK_ZSHRC' bash '$SCRIPT' --config"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c 'JIRA_URL' "$JIRA_TASK_ZSHRC")" -eq 1 ]
+  grep -q 'export JIRA_URL="https://new.atlassian.net"' "$JIRA_TASK_ZSHRC"
+}

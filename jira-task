@@ -15,10 +15,35 @@ usage() {
   exit 1
 }
 
+set_zshrc_var() {
+  local key="$1"
+  local value="$2"
+  if grep -q "^export ${key}=" "$JIRA_TASK_ZSHRC" 2>/dev/null; then
+    sed -i '' "s|^export ${key}=.*|export ${key}=\"${value}\"|" "$JIRA_TASK_ZSHRC"
+  else
+    printf 'export %s="%s"\n' "$key" "$value" >> "$JIRA_TASK_ZSHRC"
+  fi
+}
+
+config() {
+  echo "Jira Task to Markdown — Configuration"
+  echo "Get your API token at: https://id.atlassian.com/manage-profile/security/api-tokens"
+  echo ""
+  read -r -p "Jira base URL (e.g. https://yourcompany.atlassian.net): " jira_url
+  read -r -p "Jira email: " jira_email
+  read -r -s -p "Jira API token: " jira_token
+  echo ""
+  set_zshrc_var "JIRA_URL" "$jira_url"
+  set_zshrc_var "JIRA_EMAIL" "$jira_email"
+  set_zshrc_var "JIRA_API_TOKEN" "$jira_token"
+  echo ""
+  echo "Config saved. Run: source $JIRA_TASK_ZSHRC"
+}
+
 check_dependencies
 
 case "${1:-}" in
-  --config) echo "config not yet implemented" ;;
+  --config) config ;;
   "") usage ;;
   *) echo "fetch not yet implemented" ;;
 esac
