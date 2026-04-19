@@ -138,14 +138,9 @@ fetch_issue() {
             if ($rows | length) == 0 then ""
             else
               (($rows[0].content // []) | length) as $ncols |
-              ($rows[0].content // [] | map(.type) | contains(["tableHeader"])) as $has_header |
-              if $has_header and $ncols > 0 then
-                ($rows[0] | adf_to_md) +
-                "| " + ([range($ncols) | "---"] | join(" | ")) + " |\n" +
-                ($rows[1:] | map(adf_to_md) | join("")) + "\n"
-              else
-                ($rows | map(adf_to_md) | join("")) + "\n"
-              end
+              ($rows[0] | adf_to_md) +
+              "| " + ([range($ncols) | "---"] | join(" | ")) + " |\n" +
+              ($rows[1:] | map(adf_to_md) | join("")) + "\n"
             end
           elif .type == "tableRow" then
             "| " + (.content // [] | map(adf_to_md) | join(" | ")) + " |\n"
