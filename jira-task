@@ -121,11 +121,14 @@ fetch_issue() {
           elif .type == "bulletList" then
             (.content // [] | map(adf_to_md) | join(""))
           elif .type == "orderedList" then
-            (.content // [] | map(adf_to_md) | join(""))
+            (.content // [] | to_entries | map(
+              ((.key + 1) | tostring) + ". " +
+              ((.value.content // [] | map(adf_to_md) | join("")) | gsub("\n\n$"; "")) + "\n"
+            ) | join(""))
           elif .type == "listItem" then
             ("- " + ((.content // [] | map(adf_to_md) | join("")) | gsub("\n\n$"; "")) + "\n")
           elif .type == "codeBlock" then
-            ("```\n" + (.content // [] | map(adf_to_md) | join("")) + "```\n\n")
+            ("```\n" + (.content // [] | map(adf_to_md) | join("")) + "\n```\n\n")
           elif .type == "hardBreak" then "\n"
           elif .type == "rule" then "---\n\n"
           elif .type == "inlineCard" then (.attrs.url // "")
