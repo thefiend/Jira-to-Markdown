@@ -56,6 +56,40 @@ fetch_issue() {
     echo "Missing config. Run: jira-task --config" >&2
     exit 1
   fi
+
+  local auth
+  auth=$(printf '%s:%s' "${JIRA_EMAIL}" "${JIRA_API_TOKEN}" | base64 | tr -d '\n')
+
+  local tmpfile
+  tmpfile=$(mktemp)
+
+  local http_code
+  http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" \
+    -H "Authorization: Basic ${auth}" \
+    -H "Accept: application/json" \
+    "${JIRA_URL}/rest/api/3/issue/${issue_key}") || {
+    echo "curl failed" >&2
+    rm -f "$tmpfile"
+    exit 1
+  }
+
+  local response
+  response=$(cat "$tmpfile")
+  rm -f "$tmpfile"
+
+  case "$http_code" in
+    200) ;;
+    401|403)
+      echo "Authentication failed. Check your email and API token" >&2
+      exit 1 ;;
+    404)
+      echo "Issue ${issue_key} not found" >&2
+      exit 1 ;;
+    *)
+      echo "API error: HTTP ${http_code}" >&2
+      exit 1 ;;
+  esac
+
   echo "fetch not yet complete"
 }
 
