@@ -148,6 +148,14 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   grep -q "^- Item one" "$TEST_DIR/PROJ-790.md"
 }
 
+@test "bold text with trailing space has trailing space removed" {
+  local bold_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Hello ","marks":[{"type":"strong"}]},{"type":"text","text":"world"}]}]}}}'
+  setup_mock_curl "200" "$bold_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-803
+  grep -q "\*\*Hello\*\* world" "$TEST_DIR/PROJ-803.md"
+}
+
 @test "converts ADF table with tableHeader row to markdown table" {
   local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Name"}]}]},{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Value"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Foo"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Bar"}]}]}]}]}]}}}'
   setup_mock_curl "200" "$table_issue"

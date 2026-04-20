@@ -109,7 +109,10 @@ fetch_issue() {
             ((.marks // []) | map(.type) | contains(["em"])) as $em |
             ((.marks // []) | map(.type) | contains(["code"])) as $code |
             (.text // "") |
-            if $bold then ("**" + . + "**")
+            if $bold then
+              (. | gsub("\\s+$"; "")) as $inner |
+              (. | ltrimstr($inner)) as $trailing |
+              ("**" + $inner + "**" + $trailing)
             elif $em then ("_" + . + "_")
             elif $code then ("`" + . + "`")
             else .
