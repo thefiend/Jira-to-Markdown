@@ -114,11 +114,13 @@ fetch_issue() {
   while IFS=$'\t' read -r att_id att_filename att_content; do
     [[ -z "$att_filename" ]] && continue
     att_filename="${att_filename// /-}"
-    effective_url=$(curl -sfL \
+    printf 'Downloading %s\n' "$att_filename" >&2
+    effective_url=$(curl -fL \
+      --progress-bar \
       -H "Authorization: Basic ${auth}" \
       -w "%{url_effective}" \
       "$att_content" \
-      -o "${images_dir}/${att_filename}" 2>/dev/null) || effective_url=""
+      -o "${images_dir}/${att_filename}") || effective_url=""
     # Extract the media UUID from the CDN redirect URL: /file/{uuid}/binary
     if [[ "$effective_url" =~ /file/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}) ]]; then
       local media_uuid="${BASH_REMATCH[1]}"
