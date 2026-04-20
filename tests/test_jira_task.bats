@@ -176,6 +176,15 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   grep -q "^| 1 | 2 |$" "$TEST_DIR/PROJ-801.md"
 }
 
+@test "table preceded by bullet list has blank line before header" {
+  local issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Item"}]}]}]},{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Col"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Val"}]}]}]}]}]}}}'
+  setup_mock_curl "200" "$issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-804
+  # the line immediately before "| Col |" must be blank
+  awk 'prev == "" && /^\| Col \|$/{found=1} {prev=$0} END{exit found ? 0 : 1}' "$TEST_DIR/PROJ-804.md"
+}
+
 @test "table cell containing pipe character is escaped" {
   local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Command"}]}]},{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Notes"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"cat a | grep b"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"filters"}]}]}]}]}]}}}'
   setup_mock_curl "200" "$table_issue"

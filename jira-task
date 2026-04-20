@@ -141,6 +141,7 @@ fetch_issue() {
             if ($rows | length) == 0 then ""
             else
               (($rows[0].content // []) | length) as $ncols |
+              "\n" +
               ($rows[0] | adf_to_md) +
               "| " + ([range($ncols) | "---"] | join(" | ")) + " |\n" +
               ($rows[1:] | map(adf_to_md) | join("")) + "\n"
