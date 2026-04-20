@@ -147,3 +147,31 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-790
   grep -q "^- Item one" "$TEST_DIR/PROJ-790.md"
 }
+
+@test "converts ADF table with tableHeader row to markdown table" {
+  local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Name"}]}]},{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Value"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Foo"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Bar"}]}]}]}]}]}}}'
+  setup_mock_curl "200" "$table_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-800
+  grep -q "^| Name | Value |$" "$TEST_DIR/PROJ-800.md"
+  grep -q "^| --- | --- |$" "$TEST_DIR/PROJ-800.md"
+  grep -q "^| Foo | Bar |$" "$TEST_DIR/PROJ-800.md"
+}
+
+@test "converts ADF table with all tableCell rows treating first row as header" {
+  local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Col A"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Col B"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"1"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"2"}]}]}]}]}]}}}'
+  setup_mock_curl "200" "$table_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-801
+  grep -q "^| Col A | Col B |$" "$TEST_DIR/PROJ-801.md"
+  grep -q "^| --- | --- |$" "$TEST_DIR/PROJ-801.md"
+  grep -q "^| 1 | 2 |$" "$TEST_DIR/PROJ-801.md"
+}
+
+@test "table cell containing pipe character is escaped" {
+  local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Command"}]}]},{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Notes"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"cat a | grep b"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"filters"}]}]}]}]}]}}}'
+  setup_mock_curl "200" "$table_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-802
+  grep -q "cat a \\\\| grep b" "$TEST_DIR/PROJ-802.md"
+}

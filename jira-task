@@ -149,7 +149,8 @@ fetch_issue() {
               | gsub("\\s+$"; "")
               | gsub("\n"; " ")
               | gsub(" {2,}"; " ")
-              | ltrimstr(" "))
+              | ltrimstr(" ")
+              | gsub("\\|"; "\\|"))
           else (.content // [] | map(adf_to_md) | join(""))
           end
         elif type == "array" then
