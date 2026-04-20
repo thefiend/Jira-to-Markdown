@@ -140,11 +140,19 @@ fetch_issue() {
             .content as $rows |
             if ($rows | length) == 0 then ""
             else
-              (($rows[0].content // []) | length) as $ncols |
+              (($rows[0].content // []) | map(.attrs.colspan // 1) | add // 0) as $ncols |
+              def expand_row(ncols):
+                "| " + (.content // [] | map(
+                  (.attrs.colspan // 1) as $span |
+                  adf_to_md as $cell |
+                  [$cell] + [range($span - 1) | ""]
+                ) | flatten |
+                . + [range(ncols - length) | ""] |
+                join(" | ")) + " |\n";
               "\n" +
-              ($rows[0] | adf_to_md) +
+              ($rows[0] | expand_row($ncols)) +
               "| " + ([range($ncols) | "---"] | join(" | ")) + " |\n" +
-              ($rows[1:] | map(adf_to_md) | join("")) + "\n"
+              ($rows[1:] | map(expand_row($ncols)) | join("")) + "\n"
             end
           elif .type == "tableRow" then
             "| " + (.content // [] | map(adf_to_md) | join(" | ")) + " |\n"

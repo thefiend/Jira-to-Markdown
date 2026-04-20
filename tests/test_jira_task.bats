@@ -185,6 +185,20 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   awk 'prev == "" && /^\| Col \|$/{found=1} {prev=$0} END{exit found ? 0 : 1}' "$TEST_DIR/PROJ-804.md"
 }
 
+@test "table header cell with colspan expands to correct column count" {
+  # Features header has colspan=3 so table should have 7 columns total (1+1+1+1+3)
+  local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{"colspan":1},"content":[{"type":"paragraph","content":[{"type":"text","text":"Name"}]}]},{"type":"tableHeader","attrs":{"colspan":3},"content":[{"type":"paragraph","content":[{"type":"text","text":"Features"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"A"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"1"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"2"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"3"}]}]}]}]}]}}}'
+  setup_mock_curl "200" "$table_issue"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-805
+  # header row: Features expands to 3 cols → "| Name | Features |  |  |"
+  grep -q "^| Name | Features |  |  |$" "$TEST_DIR/PROJ-805.md"
+  # separator must have 4 dashes (1 + 3)
+  grep -q "^| --- | --- | --- | --- |$" "$TEST_DIR/PROJ-805.md"
+  # data row has all 4 columns
+  grep -q "^| A | 1 | 2 | 3 |$" "$TEST_DIR/PROJ-805.md"
+}
+
 @test "table cell containing pipe character is escaped" {
   local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Command"}]}]},{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Notes"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"cat a | grep b"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"filters"}]}]}]}]}]}}}'
   setup_mock_curl "200" "$table_issue"
