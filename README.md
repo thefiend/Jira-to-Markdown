@@ -2,6 +2,8 @@
 
 Fetches a Jira Cloud issue and writes it to a Markdown file. Intended to give agentic AI tools context on what to work on.
 
+![Jira to Markdown](./images/jira-to-markdown.jpeg) 
+
 ## Output
 
 Running `jira-task PROJ-123` creates:
