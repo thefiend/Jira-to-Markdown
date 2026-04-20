@@ -31,6 +31,47 @@ CURL_EOF
   chmod +x "$TEST_DIR/bin/curl"
 }
 
+# URL-aware mock: routes /attachment/content/ to image data, everything else to issue JSON
+setup_mock_curl_with_image() {
+  local status_code="$1"
+  local body="$2"
+  local img_filename="${3:-test-image.png}"
+
+  printf '%s' "$body" > "$TEST_DIR/mock_body.json"
+  printf '%s' "$status_code" > "$TEST_DIR/mock_status.txt"
+  # Minimal PNG header bytes as a stand-in image
+  printf '\x89PNG\r\n\x1a\n' > "$TEST_DIR/mock_image.bin"
+  printf '%s' "$img_filename" > "$TEST_DIR/mock_img_fname.txt"
+
+  cat > "$TEST_DIR/bin/curl" << 'CURL_EOF'
+#!/usr/bin/env bash
+TEST_BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+TEST_DIR="$(dirname "$TEST_BIN_DIR")"
+output_file=""
+headers_file=""
+url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) output_file="$2"; shift 2 ;;
+    -D) headers_file="$2"; shift 2 ;;
+    -w|-H|-A) shift 2 ;;
+    http*|https*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+img_fname="$(cat "$TEST_DIR/mock_img_fname.txt" 2>/dev/null)"
+if echo "$url" | grep -q "/attachment/content/"; then
+  [ -n "$output_file" ] && cp "$TEST_DIR/mock_image.bin" "$output_file"
+  [ -n "$headers_file" ] && printf 'HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-disposition: attachment; filename="%s"\r\n\r\n' "$img_fname" > "$headers_file"
+  printf '200'
+else
+  [ -n "$output_file" ] && cp "$TEST_DIR/mock_body.json" "$output_file"
+  cat "$TEST_DIR/mock_status.txt"
+fi
+CURL_EOF
+  chmod +x "$TEST_DIR/bin/curl"
+}
+
 @test "exits with error if jq is not installed" {
   run env PATH="$TEST_DIR/bin" /bin/bash "$SCRIPT" PROJ-123
   [ "$status" -eq 1 ]
@@ -102,26 +143,34 @@ CURL_EOF
 
 SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Users cannot log in after password reset."}]}]}}}'
 
-@test "creates output file named after issue key" {
+@test "creates output directory and file named after issue key" {
   setup_mock_curl "200" "$SIMPLE_ISSUE"
   cd "$TEST_DIR"
   run env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
   [ "$status" -eq 0 ]
-  [ -f "$TEST_DIR/PROJ-123.md" ]
+  [ -d "$TEST_DIR/PROJ-123" ]
+  [ -f "$TEST_DIR/PROJ-123/PROJ-123.md" ]
+}
+
+@test "images directory is created alongside the markdown file" {
+  setup_mock_curl "200" "$SIMPLE_ISSUE"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
+  [ -d "$TEST_DIR/PROJ-123/images" ]
 }
 
 @test "output file contains issue key and summary as title" {
   setup_mock_curl "200" "$SIMPLE_ISSUE"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
-  grep -q "^# PROJ-123: Fix the login bug$" "$TEST_DIR/PROJ-123.md"
+  grep -q "^# PROJ-123: Fix the login bug$" "$TEST_DIR/PROJ-123/PROJ-123.md"
 }
 
 @test "output file contains description text" {
   setup_mock_curl "200" "$SIMPLE_ISSUE"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-123
-  grep -q "Users cannot log in after password reset" "$TEST_DIR/PROJ-123.md"
+  grep -q "Users cannot log in after password reset" "$TEST_DIR/PROJ-123/PROJ-123.md"
 }
 
 @test "output file omits Description section when description is null" {
@@ -129,7 +178,7 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$no_desc"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-456
-  ! grep -q "## Description" "$TEST_DIR/PROJ-456.md"
+  ! grep -q "## Description" "$TEST_DIR/PROJ-456/PROJ-456.md"
 }
 
 @test "converts ADF heading to markdown heading" {
@@ -137,7 +186,7 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$heading_issue"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-789
-  grep -q "^## Section Title" "$TEST_DIR/PROJ-789.md"
+  grep -q "^## Section Title" "$TEST_DIR/PROJ-789/PROJ-789.md"
 }
 
 @test "converts ADF bullet list to markdown list" {
@@ -145,7 +194,7 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$list_issue"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-790
-  grep -q "^- Item one" "$TEST_DIR/PROJ-790.md"
+  grep -q "^- Item one" "$TEST_DIR/PROJ-790/PROJ-790.md"
 }
 
 @test "bold text with trailing space has trailing space removed" {
@@ -153,7 +202,7 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$bold_issue"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-803
-  grep -q "\*\*Hello\*\* world" "$TEST_DIR/PROJ-803.md"
+  grep -q "\*\*Hello\*\* world" "$TEST_DIR/PROJ-803/PROJ-803.md"
 }
 
 @test "converts ADF table with tableHeader row to markdown table" {
@@ -161,9 +210,9 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$table_issue"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-800
-  grep -q "^| Name | Value |$" "$TEST_DIR/PROJ-800.md"
-  grep -q "^| --- | --- |$" "$TEST_DIR/PROJ-800.md"
-  grep -q "^| Foo | Bar |$" "$TEST_DIR/PROJ-800.md"
+  grep -q "^| Name | Value |$" "$TEST_DIR/PROJ-800/PROJ-800.md"
+  grep -q "^| --- | --- |$" "$TEST_DIR/PROJ-800/PROJ-800.md"
+  grep -q "^| Foo | Bar |$" "$TEST_DIR/PROJ-800/PROJ-800.md"
 }
 
 @test "converts ADF table with all tableCell rows treating first row as header" {
@@ -171,9 +220,9 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$table_issue"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-801
-  grep -q "^| Col A | Col B |$" "$TEST_DIR/PROJ-801.md"
-  grep -q "^| --- | --- |$" "$TEST_DIR/PROJ-801.md"
-  grep -q "^| 1 | 2 |$" "$TEST_DIR/PROJ-801.md"
+  grep -q "^| Col A | Col B |$" "$TEST_DIR/PROJ-801/PROJ-801.md"
+  grep -q "^| --- | --- |$" "$TEST_DIR/PROJ-801/PROJ-801.md"
+  grep -q "^| 1 | 2 |$" "$TEST_DIR/PROJ-801/PROJ-801.md"
 }
 
 @test "table preceded by bullet list has blank line before header" {
@@ -182,7 +231,7 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-804
   # the line immediately before "| Col |" must be blank
-  awk 'prev == "" && /^\| Col \|$/{found=1} {prev=$0} END{exit found ? 0 : 1}' "$TEST_DIR/PROJ-804.md"
+  awk 'prev == "" && /^\| Col \|$/{found=1} {prev=$0} END{exit found ? 0 : 1}' "$TEST_DIR/PROJ-804/PROJ-804.md"
 }
 
 @test "table header cell with colspan expands to correct column count" {
@@ -192,11 +241,21 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-805
   # header row: Features expands to 3 cols → "| Name | Features |  |  |"
-  grep -q "^| Name | Features |  |  |$" "$TEST_DIR/PROJ-805.md"
+  grep -q "^| Name | Features |  |  |$" "$TEST_DIR/PROJ-805/PROJ-805.md"
   # separator must have 4 dashes (1 + 3)
-  grep -q "^| --- | --- | --- | --- |$" "$TEST_DIR/PROJ-805.md"
+  grep -q "^| --- | --- | --- | --- |$" "$TEST_DIR/PROJ-805/PROJ-805.md"
   # data row has all 4 columns
-  grep -q "^| A | 1 | 2 | 3 |$" "$TEST_DIR/PROJ-805.md"
+  grep -q "^| A | 1 | 2 | 3 |$" "$TEST_DIR/PROJ-805/PROJ-805.md"
+}
+
+@test "ADF mediaSingle image is downloaded and embedded in markdown" {
+  local uuid="abc123-test-uuid"
+  local media_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"mediaSingle","attrs":{"layout":"center"},"content":[{"type":"media","attrs":{"id":"abc123-test-uuid","type":"file","collection":"test"}}]}]}}}'
+  setup_mock_curl_with_image "200" "$media_issue" "screenshot.png"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-806
+  [ -f "$TEST_DIR/PROJ-806/images/screenshot.png" ]
+  grep -q '!\[screenshot.png\](images/screenshot.png)' "$TEST_DIR/PROJ-806/PROJ-806.md"
 }
 
 @test "table cell containing pipe character is escaped" {
@@ -204,5 +263,5 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   setup_mock_curl "200" "$table_issue"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-802
-  grep -q "cat a \\\\| grep b" "$TEST_DIR/PROJ-802.md"
+  grep -q "cat a \\\\| grep b" "$TEST_DIR/PROJ-802/PROJ-802.md"
 }

@@ -67,7 +67,7 @@ fetch_issue() {
   http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" \
     -H "Authorization: Basic ${auth}" \
     -H "Accept: application/json" \
-    "${JIRA_URL}/rest/api/3/issue/${issue_key}") || {
+    "${JIRA_URL}/rest/api/3/issue/${issue_key}?fields=summary,description,attachment") || {
     echo "curl failed" >&2
     rm -f "$tmpfile"
     exit 1
@@ -96,9 +96,84 @@ fetch_issue() {
   local description_json
   description_json=$(printf '%s' "$response" | jq -c '.fields.description')
 
+  # Create output directory structure
+  local output_dir="${issue_key}"
+  local images_dir="${output_dir}/images"
+  mkdir -p "$images_dir"
+
+  # Extract image attachments from the API response
+  local attachments_json
+  attachments_json=$(printf '%s' "$response" | jq -c \
+    '[.fields.attachment // [] | .[] | select(.mimeType | startswith("image/")) | {id, filename, content}]')
+
+  # Step A: Download all image attachments by numeric ID using their content URL
+  local att_id att_filename att_content
+  while IFS=$'\t' read -r att_id att_filename att_content; do
+    [[ -z "$att_filename" ]] && continue
+    curl -sf \
+      -H "Authorization: Basic ${auth}" \
+      "$att_content" \
+      -o "${images_dir}/${att_filename}" 2>/dev/null || true
+  done < <(printf '%s' "$attachments_json" | jq -r '.[] | [.id, .filename, .content] | @tsv' 2>/dev/null || true)
+
+  # Step B: For each media UUID in the ADF description, build a UUID→filename map
+  local media_map="{}"
+  if [[ "$description_json" != "null" ]] && [[ -n "$description_json" ]]; then
+    local uuid
+    while IFS= read -r uuid; do
+      [[ -z "$uuid" ]] && continue
+
+      # Check if the UUID directly matches a numeric attachment ID
+      local matched_filename
+      matched_filename=$(printf '%s' "$attachments_json" | \
+        jq -r --arg id "$uuid" '.[] | select(.id == $id) | .filename // empty' 2>/dev/null || true)
+
+      if [[ -n "$matched_filename" ]]; then
+        media_map=$(printf '%s' "$media_map" | jq --arg k "$uuid" --arg v "$matched_filename" '. + {($k): $v}')
+        continue
+      fi
+
+      # Try downloading directly by UUID (works on Jira Cloud)
+      local hdr_file img_tmpfile img_code
+      hdr_file=$(mktemp)
+      img_tmpfile=$(mktemp)
+      img_code=$(curl -s -L -D "$hdr_file" -o "$img_tmpfile" -w "%{http_code}" \
+        -H "Authorization: Basic ${auth}" \
+        "${JIRA_URL}/rest/api/3/attachment/content/${uuid}" 2>/dev/null) || img_code="000"
+
+      if [[ "$img_code" == "200" ]]; then
+        local fname hdr_line
+        hdr_line=$(grep -i "^content-disposition:" "$hdr_file" || echo "")
+        if [[ "$hdr_line" =~ [Ff]ilename=\"([^\"]+)\" ]]; then
+          fname="${BASH_REMATCH[1]}"
+        else
+          local ctype ext
+          ctype=$(grep -i "^content-type:" "$hdr_file" | head -1 || echo "")
+          ctype="${ctype##*:}"; ctype="${ctype%%;*}"; ctype="${ctype// /}"
+          case "${ctype,,}" in
+            image/png)  ext="png" ;;
+            image/jpeg) ext="jpg" ;;
+            image/gif)  ext="gif" ;;
+            image/webp) ext="webp" ;;
+            image/svg*)  ext="svg" ;;
+            *)          ext="bin" ;;
+          esac
+          fname="${uuid}.${ext}"
+        fi
+        mv "$img_tmpfile" "${images_dir}/${fname}"
+        media_map=$(printf '%s' "$media_map" | jq --arg k "$uuid" --arg v "$fname" '. + {($k): $v}')
+      else
+        rm -f "$img_tmpfile"
+      fi
+      rm -f "$hdr_file"
+    done < <(printf '%s' "$description_json" | jq -r \
+      '[.. | objects | select(.type == "media" or .type == "mediaInline") | .attrs.id // empty] | unique | .[]' \
+      2>/dev/null || true)
+  fi
+
   local description_md=""
   if [[ "$description_json" != "null" ]] && [[ -n "$description_json" ]]; then
-    description_md=$(printf '%s' "$description_json" | jq -r '
+    description_md=$(printf '%s' "$description_json" | jq -r --argjson media_map "$media_map" '
       def adf_to_md:
         if type == "null" then ""
         elif type == "object" then
@@ -136,6 +211,16 @@ fetch_issue() {
           elif .type == "rule" then "---\n\n"
           elif .type == "inlineCard" then (.attrs.url // "")
           elif .type == "mention" then ("@" + (.attrs.displayName // .attrs.id // "unknown"))
+          elif .type == "mediaSingle" then
+            (.content // [] | map(adf_to_md) | join(""))
+          elif .type == "media" then
+            ($media_map[.attrs.id // ""] // "") as $fname |
+            if $fname != "" then "![" + $fname + "](images/" + $fname + ")\n\n"
+            else "" end
+          elif .type == "mediaInline" then
+            ($media_map[.attrs.id // ""] // "") as $fname |
+            if $fname != "" then "![" + $fname + "](images/" + $fname + ")"
+            else "" end
           elif .type == "table" then
             .content as $rows |
             if ($rows | length) == 0 then ""
@@ -173,7 +258,7 @@ fetch_issue() {
     ')
   fi
 
-  local output_file="${issue_key}.md"
+  local output_file="${output_dir}/${issue_key}.md"
   {
     printf '# %s: %s\n' "$issue_key" "$summary"
     if [[ -n "$description_md" ]]; then
