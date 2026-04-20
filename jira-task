@@ -36,7 +36,7 @@ set_zshrc_var() {
 }
 
 config() {
-  echo "Jira Task to Markdown — Configuration"
+  echo "JIRA to Markdown — Configuration"
   echo "Get your API token at: https://id.atlassian.com/manage-profile/security/api-tokens"
   echo ""
   read -r -p "Jira base URL (e.g. https://yourcompany.atlassian.net): " jira_url
