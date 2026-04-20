@@ -36,34 +36,33 @@ setup_mock_curl_with_image() {
   local status_code="$1"
   local body="$2"
   local img_filename="${3:-test-image.png}"
+  local img_uuid="${4:-aabbccdd-1122-3344-5566-778899aabbcc}"
 
   printf '%s' "$body" > "$TEST_DIR/mock_body.json"
   printf '%s' "$status_code" > "$TEST_DIR/mock_status.txt"
   # Minimal PNG header bytes as a stand-in image
   printf '\x89PNG\r\n\x1a\n' > "$TEST_DIR/mock_image.bin"
   printf '%s' "$img_filename" > "$TEST_DIR/mock_img_fname.txt"
+  printf '%s' "$img_uuid" > "$TEST_DIR/mock_img_uuid.txt"
 
   cat > "$TEST_DIR/bin/curl" << 'CURL_EOF'
 #!/usr/bin/env bash
 TEST_BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEST_DIR="$(dirname "$TEST_BIN_DIR")"
 output_file=""
-headers_file=""
 url=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) output_file="$2"; shift 2 ;;
-    -D) headers_file="$2"; shift 2 ;;
-    -w|-H|-A) shift 2 ;;
+    -w|-D|-H|-A) shift 2 ;;
     http*|https*) url="$1"; shift ;;
     *) shift ;;
   esac
 done
-img_fname="$(cat "$TEST_DIR/mock_img_fname.txt" 2>/dev/null)"
+img_uuid="$(cat "$TEST_DIR/mock_img_uuid.txt" 2>/dev/null)"
 if echo "$url" | grep -q "/attachment/content/"; then
   [ -n "$output_file" ] && cp "$TEST_DIR/mock_image.bin" "$output_file"
-  [ -n "$headers_file" ] && printf 'HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-disposition: attachment; filename="%s"\r\n\r\n' "$img_fname" > "$headers_file"
-  printf '200'
+  printf 'https://api.media.atlassian.com/file/%s/binary?token=fake' "$img_uuid"
 else
   [ -n "$output_file" ] && cp "$TEST_DIR/mock_body.json" "$output_file"
   cat "$TEST_DIR/mock_status.txt"
@@ -249,9 +248,9 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
 }
 
 @test "ADF mediaSingle image is downloaded and embedded in markdown" {
-  local uuid="abc123-test-uuid"
-  local media_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"mediaSingle","attrs":{"layout":"center"},"content":[{"type":"media","attrs":{"id":"abc123-test-uuid","type":"file","collection":"test"}}]}]}}}'
-  setup_mock_curl_with_image "200" "$media_issue" "screenshot.png"
+  local uuid="aabbccdd-1122-3344-5566-778899aabbcc"
+  local media_issue="{\"fields\":{\"summary\":\"Test\",\"description\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"mediaSingle\",\"attrs\":{\"layout\":\"center\"},\"content\":[{\"type\":\"media\",\"attrs\":{\"id\":\"${uuid}\",\"type\":\"file\",\"collection\":\"test\"}}]}]},\"attachment\":[{\"id\":\"12345\",\"filename\":\"screenshot.png\",\"mimeType\":\"image/png\",\"content\":\"https://test.atlassian.net/rest/api/3/attachment/content/12345\"}]}}"
+  setup_mock_curl_with_image "200" "$media_issue" "screenshot.png" "$uuid"
   cd "$TEST_DIR"
   env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-806
   [ -f "$TEST_DIR/PROJ-806/images/screenshot.png" ]
