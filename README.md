@@ -38,6 +38,13 @@ Prompts for your Jira base URL, email, and API token, then saves them to `~/.zsh
 jira-task PROJ-123
 ```
 
+Image attachments are downloaded with a progress bar:
+
+```
+Downloading screenshot.png
+######################################################################## 100.0%
+```
+
 ## Dependencies
 
 - `curl` — pre-installed on macOS
