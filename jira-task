@@ -113,6 +113,7 @@ fetch_issue() {
   local att_id att_filename att_content effective_url
   while IFS=$'\t' read -r att_id att_filename att_content; do
     [[ -z "$att_filename" ]] && continue
+    att_filename="${att_filename// /-}"
     effective_url=$(curl -sfL \
       -H "Authorization: Basic ${auth}" \
       -w "%{url_effective}" \

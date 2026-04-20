@@ -257,6 +257,16 @@ SIMPLE_ISSUE='{"fields":{"summary":"Fix the login bug","description":{"type":"do
   grep -q '!\[screenshot.png\](images/screenshot.png)' "$TEST_DIR/PROJ-806/PROJ-806.md"
 }
 
+@test "image filename with spaces is saved with dashes and path updated in markdown" {
+  local uuid="aabbccdd-1122-3344-5566-778899aabbcc"
+  local media_issue="{\"fields\":{\"summary\":\"Test\",\"description\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"mediaSingle\",\"attrs\":{\"layout\":\"center\"},\"content\":[{\"type\":\"media\",\"attrs\":{\"id\":\"${uuid}\",\"type\":\"file\",\"collection\":\"test\"}}]}]},\"attachment\":[{\"id\":\"12345\",\"filename\":\"my screenshot.png\",\"mimeType\":\"image/png\",\"content\":\"https://test.atlassian.net/rest/api/3/attachment/content/12345\"}]}}"
+  setup_mock_curl_with_image "200" "$media_issue" "my screenshot.png" "$uuid"
+  cd "$TEST_DIR"
+  env PATH="$TEST_DIR/bin:$PATH" JIRA_URL="https://test.atlassian.net" JIRA_EMAIL="a@b.com" JIRA_API_TOKEN="tok" bash "$SCRIPT" PROJ-807
+  [ -f "$TEST_DIR/PROJ-807/images/my-screenshot.png" ]
+  grep -q '!\[my-screenshot.png\](images/my-screenshot.png)' "$TEST_DIR/PROJ-807/PROJ-807.md"
+}
+
 @test "table cell containing pipe character is escaped" {
   local table_issue='{"fields":{"summary":"Test","description":{"type":"doc","version":1,"content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Command"}]}]},{"type":"tableHeader","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"Notes"}]}]}]},{"type":"tableRow","content":[{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"cat a | grep b"}]}]},{"type":"tableCell","attrs":{},"content":[{"type":"paragraph","content":[{"type":"text","text":"filters"}]}]}]}]}]}}}'
   setup_mock_curl "200" "$table_issue"
