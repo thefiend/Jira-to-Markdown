@@ -17,6 +17,13 @@ PROJ-123/
 ## Installation
 
 ```bash
+brew tap thefiend/tap
+brew install jira-task
+```
+
+Or manually:
+
+```bash
 bash install.sh
 ```
 
@@ -50,4 +57,4 @@ Downloading screenshot.png
 ## Dependencies
 
 - `curl` — pre-installed on macOS
-- `jq` — `brew install jq`
+- `jq` — installed automatically via Homebrew
